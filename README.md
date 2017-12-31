@@ -1,3 +1,5 @@
+## HoneyWRT Firewall
+# Setup
 On your router install the required packages using setup.sh<br>
 Install ulogd.conf into /etc/ulogd.conf<br>
 Restart ULOGD: `/etc/init.d/ulogd restart`<br>
@@ -13,5 +15,15 @@ The --send-only option prevents attackers from sending data to the port<br>
 Port 9999 is forwarded from wan to router using a rule you can change or disable this as needed<br>
 <br>
 <br>
-TODO:<br>
+# /etc/config/firewall
+If you want to use the IPSETS created in firewall.user with your rules and redirections add this
+
+```
+config ipset
+    option external 'WHITELIST'
+    option match 'src_net'
+    option storage 'hash'
+```
+
+# Future Work
 Store rulesets in the cloud<br>
