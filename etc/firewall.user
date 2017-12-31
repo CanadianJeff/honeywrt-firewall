@@ -1,0 +1,289 @@
+#!/bin/sh
+# This file is interpreted as shell script.
+# Put your custom iptables rules here, they will
+# be executed with each firewall (re-)start.
+
+# Internal uci firewall chains are flushed and recreated on reload, so
+# put custom rules into the root chains e.g. INPUT or FORWARD or into the
+# special user chains, e.g. input_wan_rule or postrouting_lan_rule.
+
+dmesg -c 1>/dev/null 2>/dev/null
+wan_ip=`ubus call network.interface.wan status | grep \"address\" | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]`
+echo "   * WAN IP: $wan_ip"
+
+## Create chains for logging packets
+## Users can freely change DROP to RETURN for any ruleset
+iptables -N WHITELIST
+iptables -F WHITELIST
+iptables -I WHITELIST 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=WHITELIST"
+iptables -A WHITELIST -j RETURN
+iptables -N BLACKLIST
+iptables -F BLACKLIST
+iptables -I BLACKLIST 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=BLACKLIST"
+iptables -A BLACKLIST -j DROP
+iptables -N DOD
+iptables -F DOD
+iptables -I DOD 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=DOD"
+iptables -A DOD -j DROP
+iptables -N AFRINIC
+iptables -F AFRINIC
+iptables -I AFRINIC 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=AFRINIC"
+iptables -A AFRINIC -j DROP
+iptables -N APNIC
+iptables -F APNIC
+iptables -I APNIC 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=APNIC"
+iptables -A APNIC -j DROP
+iptables -N ARIN
+iptables -F ARIN
+iptables -I ARIN 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=ARIN"
+iptables -I ARIN -j RETURN
+iptables -N LACNIC
+iptables -F LACNIC
+iptables -I LACNIC 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=APNIC"
+iptables -A LACNIC -j DROP
+iptables -N RIPE
+iptables -F RIPE
+iptables -I RIPE 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=RIPE"
+iptables -A RIPE -j DROP
+iptables -N CSFLFD
+iptables -F CSFLFD
+iptables -I CSFLFD 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=CSFLFD"
+iptables -A CSFLFD -j DROP
+iptables -N CUSTOMLIST
+iptables -F CUSTOMLIST
+iptables -I CUSTOMLIST 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=CUSTOMLIST"
+iptables -A CUSTOMLIST -j DROP
+iptables -N LOGDROP
+iptables -F LOGDROP
+iptables -I LOGDROP 1 -m state --state NEW -j NFLOG --nflog-prefix "RULESET=NONE"
+iptables -I LOGDROP 2 -j DROP
+
+## IPSET RULES
+ipset create WHITELIST -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0 comment
+ipset create BLACKLIST -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 3600 comment
+ipset create CSFLFD -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 3600 comment
+ipset create CUSTOMLIST -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0 comment
+ipset create DOD -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create TOREXIT -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create AFRINIC -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create APNIC -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create ARIN -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create LACNIC -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create RIPE -exist hash:net family inet hashsize 16384 maxelem 131072 timeout 0
+ipset create wl-tcp-ports -exist bitmap:port range 0-65535
+ipset create wl-udp-ports -exist bitmap:port range 0-65535
+ipset create bl-tcp-ports -exist bitmap:port range 0-65535
+ipset create bl-udp-ports -exist bitmap:port range 0-65535
+ipset flush WHITELIST
+ipset flush BLACKLIST
+ipset flush CSFLFD
+ipset flush CUSTOMLIST
+ipset flush DOD
+ipset flush TOREXIT
+ipset flush AFRINIC
+ipset flush APNIC
+ipset flush ARIN
+ipset flush LACNIC
+ipset flush RIPE
+ipset flush wl-tcp-ports
+ipset flush wl-udp-ports
+ipset flush bl-tcp-ports
+ipset flush bl-udp-ports
+ipset add wl-tcp-ports -exist 53 ## DNS
+ipset add wl-tcp-ports -exist 27015 ## Steam Servers
+ipset add wl-udp-ports -exist 53 ## DNS
+ipset add wl-udp-ports -exist 27015 ## Steam Servers
+ipset add bl-tcp-ports -exist 21 ## File Transfer Protocol (FTP)
+ipset add bl-tcp-ports -exist 22 ## Secure Shell (SSH), secure logins, file transfers (scp, sftp) and port forwarding
+ipset add bl-tcp-ports -exist 23 ## Telnet protocol unencrypted text communications
+ipset add bl-tcp-ports -exist 88 ## Kerberos authentication system
+ipset add bl-tcp-ports -exist 445 ## SMB Windows Shares
+ipset add bl-tcp-ports -exist 1080 ## Socks Proxy
+ipset add bl-tcp-ports -exist 1433 ## Microsoft SQL Server database management system (MSSQL) server
+ipset add bl-tcp-ports -exist 2323 ## TELNET-ALT
+ipset add bl-tcp-ports -exist 3306 ## MySQL database system
+ipset add bl-tcp-ports -exist 3389 ## Microsoft Terminal Server (RDP)
+ipset add bl-tcp-ports -exist 5060 ## Session Initiation Protocol (SIP)
+ipset add bl-tcp-ports -exist 5061 ## Session Initiation Protocol (SIP) over TLS
+ipset add bl-tcp-ports -exist 5900 ## Virtual Network Computing (VNC) Remote Frame Buffer RFB protocol
+ipset add bl-udp-ports -exist 69 ## Trivial File Transfer Protocol (TFTP)
+ipset add bl-udp-ports -exist 123 ## Network Time Protocol (NTP)
+ipset add bl-udp-ports -exist 135 ##
+ipset add bl-udp-ports -exist 137 ##
+ipset add bl-udp-ports -exist 138 ##
+ipset add bl-udp-ports -exist 139 ##
+ipset add bl-udp-ports -exist 445 ## SMB Windows Shares
+ipset add bl-udp-ports -exist 1434 ## MSSQL
+ipset add bl-udp-ports -exist 5060 ## Session Initiation Protocol (SIP)
+
+## Configure wan to accept ulogd json
+iptables -t nat -I zone_wan_prerouting 2 -p tcp -m tcp --dport 9999 -j REDIRECT --to-ports 9999
+
+## Configure in from wan forward chain to match rulesets (WAN => LAN)
+iptables -I forwarding_wan_rule 1 -p tcp -m tcp --dport 65000 -j SET --add-set WHITELIST src --timeout 600 --exist
+iptables -I forwarding_wan_rule 2 -p tcp -m tcp -m set --match-set wl-tcp-ports dst -j ACCEPT
+iptables -I forwarding_wan_rule 3 -p tcp -m tcp -m set --match-set wl-udp-ports dst -j ACCEPT
+iptables -I forwarding_wan_rule 4 -p tcp -m tcp -m set --match-set bl-tcp-ports dst -j SET --add-set BLACKLIST src
+iptables -I forwarding_wan_rule 5 -p udp -m udp -m set --match-set bl-udp-ports dst -j SET --add-set BLACKLIST src
+iptables -I forwarding_wan_rule 6 -m set --match-set WHITELIST src -j WHITELIST
+iptables -I forwarding_wan_rule 7 -m set --match-set BLACKLIST src -j BLACKLIST
+iptables -I forwarding_wan_rule 8 -m set --match-set CSFLFD src -j CSFLFD
+iptables -I forwarding_wan_rule 9 -m set --match-set CUSTOMLIST src -j CUSTOMLIST
+iptables -I forwarding_wan_rule 10 -m set --match-set DOD src -j DOD
+iptables -I forwarding_wan_rule 11 -m set --match-set TOREXIT src -j DROP
+iptables -I forwarding_wan_rule 12 -m set --match-set AFRINIC src -j AFRINIC
+iptables -I forwarding_wan_rule 13 -m set --match-set APNIC src -j APNIC
+iptables -I forwarding_wan_rule 14 -m set --match-set ARIN src -j ARIN
+iptables -I forwarding_wan_rule 15 -m set --match-set LACNIC src -j LACNIC
+iptables -I forwarding_wan_rule 16 -m set --match-set RIPE src -j RIPE
+
+## Configure out to wan output chain to match rulesets (LAN => WAN)
+iptables -I forwarding_lan_rule 1 -m set --match-set DOD dst -j NFLOG --nflog-prefix "RULESET=DOD"
+iptables -I forwarding_lan_rule 2 -m set --match-set DOD dst -j DROP
+iptables -I forwarding_lan_rule 3 -m set --match-set BLACKLIST dst -j NFLOG --nflog-prefix "RULESET=BLACKLIST"
+iptables -I forwarding_lan_rule 4 -m set --match-set CSFLFD dst -j NFLOG --nflog-prefix "RULESET=CSFLFD"
+
+## Start Building Whitelist? (if does not exist)
+[ ! -f "/etc/whitelist.db" ] && { echo "192.168.000.000/16" > /etc/whitelist.db; }
+
+## Section to grab cloud hosted sets go here
+## wget maybe? does not support ssl out of the box
+
+## Remove Windows CR (0d in hex) from the db files
+sed -i 's/\r//g' /etc/afrinic.db
+sed -i 's/\r//g' /etc/apnic.db
+sed -i 's/\r//g' /etc/arin.db
+sed -i 's/\r//g' /etc/defense.db
+sed -i 's/\r//g' /etc/lacnic.db
+sed -i 's/\r//g' /etc/ripe.db
+
+## Verify MD5 Hashes
+rm -f /tmp/checksums.md5
+echo "747140fa217836db6216c0ba5117748f  /etc/afrinic.db" > /tmp/checksums.md5
+echo "e65436a94eb5083ee0d39e253e5c22c9  /etc/apnic.db" >> /tmp/checksums.md5
+echo "f13927f35ea54f4bfb60582e36760921  /etc/arin.db" >> /tmp/checksums.md5
+echo "8cdec3a6c316a87c96030da7a28c38fb  /etc/defense.db" >> /tmp/checksums.md5
+echo "2dff10d8f55177f6d1d23076a3ecb8aa  /etc/lacnic.db" >> /tmp/checksums.md5
+echo "22538a95de32efe09dec24a6f4194153  /etc/ripe.db" >> /tmp/checksums.md5
+printf "   * Verifying DB MD5 Hashes. . . "
+md5sum -cs /tmp/checksums.md5 && printf "PASS!"
+printf "\\n"
+
+## WHITELIST IPs
+unset _iplist
+_iplist=/etc/whitelist.db
+[ ! -f "$_iplist" ] && { printf "   * Loading whitelist-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading whitelist-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add WHITELIST -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## CUSTOM ADDED IPs
+unset _iplist
+_iplist=/etc/custom.db
+[ ! -f "$_iplist" ] && { printf "   * Loading custom-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading custom-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add CUSTOMLIST -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## Dept of Defense IPs
+unset _iplist
+_iplist=/etc/defense.db
+[ ! -f "$_iplist" ] && { printf "   * Loading dod-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading dod-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add DOD -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## TOR EXIT IPs
+unset _iplist
+_iplist=/etc/tor_exit.db
+[ ! -f "$_iplist" ] && { printf "   * Loading tor-exit-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading tor-exit-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add TOREXIT -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## AFRINIC IPs
+unset _iplist
+_iplist=/etc/afrinic.db
+[ ! -f "$_iplist" ] && { printf "   * Loading afrinic-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading afrinic-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add AFRINIC -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## APNIC IPs
+unset _iplist
+_iplist=/etc/apnic.db
+[ ! -f "$_iplist" ] && { printf "   * Loading apnic-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading apnic-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add APNIC -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## ARIN IPs
+unset _iplist
+_iplist=/etc/arin.db
+[ ! -f "$_iplist" ] && { printf "   * Loading arin-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading arin-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add ARIN -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## LACNIC IPs
+unset _iplist
+_iplist=/etc/lacnic.db
+[ ! -f "$_iplist" ] && { printf "   * Loading lacnic-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading lacnic-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add LACNIC -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+## RIPE IPs
+unset _iplist
+_iplist=/etc/ripe.db
+[ ! -f "$_iplist" ] && { printf "   * Loading ripe-ruleset\\n     ! Skipping due to %s not found.\\n" "$_iplist"; }
+[ -f "$_iplist" ] && { printf "   * Loading ripe-ruleset\\n";
+while IFS= read -r line; do
+        ip=$(echo "$line" | { read -r first rest ; echo "$first" ; })
+        #set -x
+        ipset add RIPE -exist "$ip"
+        #set +x
+done <"$_iplist";
+}
+
+echo " * Done Loading!"
